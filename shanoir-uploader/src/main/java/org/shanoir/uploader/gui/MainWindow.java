@@ -41,6 +41,7 @@ import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.CaretListener;
 
+import org.apache.http.HttpResponse;
 import org.apache.log4j.Logger;
 import org.jdatepicker.impl.JDatePanelImpl;
 import org.jdatepicker.impl.JDatePickerImpl;
@@ -59,6 +60,9 @@ import org.shanoir.uploader.exception.PseudonymusException;
 import org.shanoir.uploader.service.rest.UrlConfig;
 import org.shanoir.uploader.service.soap.ServiceConfiguration;
 
+import org.apache.http.Header;
+import org.springframework.http.HttpHeaders;
+import org.apache.commons.io.FileUtils;
 
 /**
  * The MainWindow of the ShanoirUploader.
@@ -821,6 +825,128 @@ public class MainWindow extends JFrame {
 		scrollPaneUpload.setPreferredSize(new Dimension(898, 600));
 		currentUploadsPanel.add(scrollPaneUpload);
 		
+		/**
+		 * Create Download Panel
+		 */
+
+		final JPanel downloadPanel = new JPanel(false);
+		downloadPanel.setLayout(gBLPanel);
+		tabbedPane.addTab(resourceBundle.getString("shanoir.uploader.downloadDatasetsTab"), null, downloadPanel,
+				resourceBundle.getString("shanoir.uploader.downloadDatasetsTab.tooltip"));
+		
+		JLabel downloadPatientIDLabel = new JLabel(resourceBundle.getString("shanoir.uploader.patientIDLabel"));
+		downloadPatientIDLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+		GridBagConstraints gbc_downloadPatientIDLabel = new GridBagConstraints();
+		gbc_downloadPatientIDLabel.anchor = GridBagConstraints.EAST;
+		gbc_downloadPatientIDLabel.insets = new Insets(10, 10, 10, 10);
+		gbc_downloadPatientIDLabel.gridx = 0;
+		gbc_downloadPatientIDLabel.gridy = 0;
+		downloadPanel.add(downloadPatientIDLabel, gbc_downloadPatientIDLabel);
+
+		JTextField downloadPatientIDTF = new JTextField();
+		GridBagConstraints gbc_downloadPatientIDTF = new GridBagConstraints();
+		gbc_downloadPatientIDTF.insets = new Insets(10, 10, 10, 10);
+		gbc_downloadPatientIDTF.fill = GridBagConstraints.HORIZONTAL;
+		gbc_downloadPatientIDTF.gridx = 1;
+		gbc_downloadPatientIDTF.gridy = 0;
+		downloadPanel.add(downloadPatientIDTF, gbc_downloadPatientIDTF);
+		downloadPatientIDTF.setColumns(15);
+		downloadPatientIDTF.setText("");
+		
+		JLabel formatLabel = new JLabel(resourceBundle.getString("shanoir.uploader.formatLabel"));
+		formatLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+		GridBagConstraints gBCFormatLabel = new GridBagConstraints();
+		gBCFormatLabel.anchor = GridBagConstraints.EAST;
+		gBCFormatLabel.insets = new Insets(10, 10, 10, 10);
+		gBCFormatLabel.gridx = 0;
+		gBCFormatLabel.gridy = 1;
+		downloadPanel.add(formatLabel, gBCFormatLabel);
+
+		ButtonGroup formatRG = new ButtonGroup();
+
+		JRadioButton dicomformatR = new JRadioButton("Dicom");
+		formatRG.add(dicomformatR);
+		downloadPanel.add(dicomformatR);
+
+		JRadioButton niftiformatR = new JRadioButton("Nifti");
+		formatRG.add(niftiformatR);
+		downloadPanel.add(niftiformatR);
+
+		GridBagConstraints gBCFormatTF = new GridBagConstraints();
+		gBCFormatTF.insets = new Insets(10, 10, 10, 10);
+		gBCFormatTF.fill = GridBagConstraints.HORIZONTAL;
+		gBCFormatTF.anchor = GridBagConstraints.WEST;
+		gBCFormatTF.gridx = 1;
+		gBCFormatTF.gridy = 1;
+		downloadPanel.add(dicomformatR, gBCFormatTF);
+
+		GridBagConstraints gBCFormatTF2 = new GridBagConstraints();
+		gBCFormatTF2.insets = new Insets(10, 10, 10, 10);
+		gBCFormatTF2.fill = GridBagConstraints.HORIZONTAL;
+		gBCFormatTF2.anchor = GridBagConstraints.EAST;
+		gBCFormatTF2.gridx = 1;
+		gBCFormatTF2.gridy = 2;
+		downloadPanel.add(niftiformatR, gBCFormatTF2);
+
+		JButton downloadButton;
+		downloadButton = new JButton(resourceBundle.getString("shanoir.uploader.downloadButton"));
+		GridBagConstraints gbc_downloadButton = new GridBagConstraints();
+		gbc_downloadButton.insets = new Insets(0, 0, 5, 0);
+		gbc_downloadButton.gridwidth = 3;
+		gbc_downloadButton.gridx = 1;
+		gbc_downloadButton.gridy = 3;
+		downloadPanel.add(downloadButton, gbc_downloadButton);
+
+		ImageIcon downloadIcon = new ImageIcon(getClass().getClassLoader().getResource("images/spinner.gif"));
+		JLabel downloadAnimationLabel = new JLabel();
+		downloadAnimationLabel.setIcon(downloadIcon);
+		downloadIcon.setImageObserver(downloadAnimationLabel);
+		GridBagConstraints gbc_downloadAnimationLabel = new GridBagConstraints();
+		gbc_downloadAnimationLabel.insets = new Insets(0, 0, 5, 0);
+		gbc_downloadAnimationLabel.gridwidth = 3;
+		gbc_downloadAnimationLabel.gridx = 1;
+		gbc_downloadAnimationLabel.gridy = 4;
+		downloadPanel.add(downloadAnimationLabel, gbc_downloadAnimationLabel);
+		downloadAnimationLabel.setVisible(false);
+
+		downloadButton.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent evt) {
+				try {
+					Long datasetId = Long.parseLong(downloadPatientIDTF.getText());
+					String format = dicomformatR.isSelected() ? "dcm" : "nii";
+					
+					JFileChooser fileChooser = new JFileChooser();
+					fileChooser.setDialogTitle("Save file");   
+					
+					int userSelection = fileChooser.showSaveDialog(frame);
+					
+					if (userSelection == JFileChooser.APPROVE_OPTION) {
+
+						File fileToSave = fileChooser.getSelectedFile();
+
+						downloadAnimationLabel.setVisible(true);
+						
+						HttpResponse response = ShUpOnloadConfig.getShanoirUploaderServiceClientNG().downloadDatasetById(datasetId, format);
+							
+						Header header = response.getFirstHeader(HttpHeaders.CONTENT_DISPOSITION);
+						String fileName = header.getValue();
+						fileName = fileName.replace("attachment;filename=", "");
+						
+						FileUtils.copyInputStreamToFile(response.getEntity().getContent(), fileToSave);
+				
+						downloadAnimationLabel.setVisible(false);
+						String message = resourceBundle.getString("shanoir.uploader.downloadComplete");
+						JOptionPane.showMessageDialog(frame, message, "Info", JOptionPane.INFORMATION_MESSAGE);
+					}
+				} catch (Exception e) {
+					logger.error(e.getMessage());
+					String message = resourceBundle.getString("shanoir.uploader.downloadError");
+					JOptionPane.showMessageDialog(frame, message, "Error", JOptionPane.ERROR_MESSAGE);
+				}
+				downloadAnimationLabel.setVisible(false);
+			}
+		});
+
 		contentPane.add(tabbedPane, BorderLayout.CENTER);
 	}
 

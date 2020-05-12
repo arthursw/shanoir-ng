@@ -1,8 +1,12 @@
 package org.shanoir.uploader.service.rest;
 
 import java.io.File;
+import java.net.URI;
 import java.util.List;
 
+import javax.ws.rs.core.UriBuilder;
+
+import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpResponse;
 import org.apache.log4j.Logger;
 import org.shanoir.uploader.ShUpConfig;
@@ -13,6 +17,7 @@ import org.shanoir.uploader.model.rest.Study;
 import org.shanoir.uploader.model.rest.StudyCard;
 import org.shanoir.uploader.model.rest.Subject;
 import org.shanoir.uploader.utils.Util;
+import org.springframework.core.io.ByteArrayResource;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -48,8 +53,10 @@ public class ShanoirUploaderServiceClientNG {
 	private static final String SERVICE_IMPORTER_CREATE_TEMP_DIR = "service.importer.create.temp.dir";
 	
 	private static final String SERVICE_IMPORTER_START_IMPORT_JOB = "service.importer.start.import.job";
-	
+
 	private static final String SERVICE_IMPORTER_START_IMPORT = "service.importer.start.import";
+	
+	private static final String SERVICE_DATASETS_DOWNLOAD_BY_ID = "service.datasets.download.by.id";
 
 	private HttpService httpService;
 	
@@ -72,8 +79,10 @@ public class ShanoirUploaderServiceClientNG {
 	private String serviceURLImporterCreateTempDir;
 	
 	private String serviceURLImporterStartImportJob;
-	
+
 	private String serviceURLImporterStartImport;
+	
+	private String serviceURLDownloadDatasetById;
 
 	public ShanoirUploaderServiceClientNG() {
 		this.httpService = new HttpService();
@@ -98,6 +107,8 @@ public class ShanoirUploaderServiceClientNG {
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_IMPORTER_START_IMPORT_JOB);
 		this.serviceURLImporterStartImport = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_IMPORTER_START_IMPORT);
+		this.serviceURLDownloadDatasetById = this.serverURL
+				+ ShUpConfig.profileProperties.getProperty(SERVICE_DATASETS_DOWNLOAD_BY_ID);
 		logger.info("ShanoirUploaderServiceNG successfully initialized.");
 	}
 	
@@ -208,6 +219,19 @@ public class ShanoirUploaderServiceClientNG {
 		} else {
 			throw new Exception("Error in startImport.");
 		}
+	}
+
+	public HttpResponse downloadDatasetById(Long datasetId, String format) throws Exception {
+		if (datasetId != null) {
+			URI url = UriBuilder.fromUri(this.serviceURLDownloadDatasetById + datasetId).queryParam("format", format).build();
+			
+			HttpResponse response = httpService.get(url.toString());
+			int code = response.getStatusLine().getStatusCode();
+			if (code == 200) {
+				return response;
+			}
+		}
+		return null;
 	}
 	
 	/**
