@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 
@@ -12,6 +13,8 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSession;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.parsers.ParserConfigurationException;
+
+import com.thoughtworks.xstream.alias.ClassMapper.Null;
 
 import org.apache.commons.cli.MissingArgumentException;
 import org.apache.commons.cli.Option;
@@ -22,8 +25,14 @@ import org.apache.commons.lang.SystemUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.keycloak.adapters.installed.KeycloakInstalled;
+
+import org.shanoir.core.model.DatasetAcquisition;
+import org.shanoir.core.model.Examination;
+import org.shanoir.core.model.dataset.Dataset;
+
 import org.shanoir.uploader.ShUpConfig;
 import org.shanoir.uploader.ShUpOnloadConfig;
+
 import org.shanoir.uploader.service.rest.ShanoirUploaderServiceClientNG;
 import org.shanoir.uploader.utils.Util;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +46,12 @@ public final class ShanoirDownloader extends ShanoirCLI {
 
 	/** -datasetId to set the id of the dataset to download. */
 	private static Option datasetIdOption;
+
+	/** -subjectId to set the id of the subject to download. */
+	private static Option subjectIdOption;
+
+	/** -studyId to set the id of the study to download. */
+	private static Option studyIdOption;
 
 	/** The Constant DESCRIPTION. */
 	private static final String DESCRIPTION = "Import dataset with the specified ID to the given destination dir.\n"
@@ -75,9 +90,22 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	static {
 		OptionBuilder.withArgName("datasetId");
 		OptionBuilder.hasArg();
-		OptionBuilder.isRequired();
 		OptionBuilder.withDescription("The dataset id.");
 		datasetIdOption = OptionBuilder.create("datasetId");
+	}
+
+	static {
+		OptionBuilder.withArgName("subjectId");
+		OptionBuilder.hasArg();
+		OptionBuilder.withDescription("The subject id.");
+		subjectIdOption = OptionBuilder.create("subjectId");
+	}
+
+	static {
+		OptionBuilder.withArgName("studyId");
+		OptionBuilder.hasArg();
+		OptionBuilder.withDescription("The study id.");
+		studyIdOption = OptionBuilder.create("studyId");
 	}
 
 	static {
@@ -124,6 +152,8 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		opts.addOption(helpOption);
 		opts.addOption(versionOption);
 		opts.addOption(datasetIdOption);
+		opts.addOption(subjectIdOption);
+		opts.addOption(studyIdOption);
 		opts.addOption(destDirOption);
 		opts.addOption(formatIdOption);
 
@@ -143,14 +173,6 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		}
 
 	}
-	
-	
-
-	/** The dataset ID to be downloaded. */
-	private long datasetId;
-
-	/** The destination directory. */
-	private File destDir = new File(SystemUtils.JAVA_IO_TMPDIR);
 
 	private void keycloakAuthentification() {
 		try {
@@ -240,12 +262,53 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		}
 	}
 	
+	private void downloadDataset(File destDir, Long datasetId) {
+		Long formatId = (long) 0;
+
+		if (cl.hasOption("formatId")) {
+			formatId = Long.parseLong(cl.getOptionValue("formatId"));
+		}
+
+		HttpResponse response = shanoirUploaderServiceClientNG.downloadDatasetById(datasetId, formatId == 6 ? "dcm" : "nii");
+
+		Header header = response.getFirstHeader(HttpHeaders.CONTENT_DISPOSITION);
+		String fileName = header.getValue();
+		fileName = fileName.replace("attachment;filename=", "");
+		
+		final File downloadedFile = new File(destDir + "/" + fileName);
+
+		FileUtils.copyInputStreamToFile(response.getEntity().getContent(), downloadedFile);
+	}
+
+	private void downloadDatasetByStudyAndSubject(File destDir, Long subjectId, Long studyId) {
+		List<Examination> examinations = shanoirUploaderServiceClientNG.findExaminationsBySubjectIdStudyId(subjectId, studyId);
+		
+		for(Examination examination : examinations) {
+			List<DatasetAcquisition> datasetAcquisitions = examination.getDatasetAcquisitionList();
+			for(DatasetAcquisition datasetAcquisition : datasetAcquisitions) {
+				for(List<Dataset> datasets : datasetAcquisition.getDatasetList()) {
+					for(Dataset dataset : datasets) {
+						downloadDataset(destDir, dataset.getDatasetId());
+					}
+				}
+			}
+		}
+	}
+
 	/**
 	 * This method download Dataset corresponding to the properties set by the
 	 * user.
 	 */
 	private void download() {
-		
+
+		File destDir = new File(SystemUtils.JAVA_IO_TMPDIR);
+		if (cl.hasOption("destDir")) {
+			destDir = new File(cl.getOptionValue("destDir"));
+			if (!this.destDir.isDirectory()) {
+				throw new IllegalArgumentException("Destination is not a directory! destDir: " + destDir);
+			}
+		}
+
 		keycloakAuthentification();
 		
 		shanoirUploaderServiceClientNG = new ShanoirUploaderServiceClientNG();
@@ -253,38 +316,30 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		ShUpConfig.profileProperties.setProperty("shanoir.server.url", "http://" + getHost() + ":" + getPort());
 		
 		try {
-			HttpResponse  response = shanoirUploaderServiceClientNG.downloadDatasetById(datasetId, formatId == 6 ? "dcm" : "nii");
-
-			Header header = response.getFirstHeader(HttpHeaders.CONTENT_DISPOSITION);
-			String fileName = header.getValue();
-			fileName = fileName.replace("attachment;filename=", "");
+			HttpResponse response = null;
 			
-			final File downloadedFile = new File(destDir + "/" + fileName);
+			if (cl.hasOption("datasetId")) {
+				Long datasetId = Long.parseLong(cl.getOptionValue("datasetId"));
+				downloadDataset(destDir, datasetId);
+			}
 
-	        FileUtils.copyInputStreamToFile(response.getEntity().getContent(), downloadedFile);
+			if (cl.hasOption("subjectId") && !cl.hasOption("studyId")) {
+				List<org.shanoir.uploader.model.rest.Examination> examinations = shanoirUploaderServiceClientNG.findExaminationsBySubjectId(subjectId);
+				
+				for(org.shanoir.uploader.model.rest.Examination examination : examinations) {
+					studyId = examination.getStudy();
+					downloadDatasetByStudyAndSubject(destDir, studyId, subjectId);
+				}
+			}
+
+			if (cl.hasOption("subjectId") && cl.hasOption("studyId")) {
+				downloadDatasetByStudyAndSubject(destDir, studyId, subjectId);
+			}
 	        
 		} catch (Exception e) {
 			e.printStackTrace();
 			exit("Download failed: " + e.getMessage());
 		}
-	}
-
-	/**
-	 * Gets the dataset id.
-	 *
-	 * @return the datasetId
-	 */
-	public long getDatasetId() {
-		return datasetId;
-	}
-
-	/**
-	 * Gets the dest dir.
-	 *
-	 * @return the destDir
-	 */
-	public File getDestDir() {
-		return destDir;
 	}
 
 	/*
@@ -295,50 +350,8 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	@Override
 	protected void postParse() throws MissingArgumentException,
 			DatatypeConfigurationException {
-		
-		if (cl.hasOption("datasetId")) {
-			this.datasetId = Long.parseLong(cl.getOptionValue("datasetId"));
-		}
-		if (cl.hasOption("formatId")) {
-			formatId = Long.parseLong(cl.getOptionValue("formatId"));
-		}
-		if (cl.hasOption("destDir")) {
-			this.setDestDir(cl.getOptionValue("destDir"));
-		}
-
-	}
-
-	/**
-	 * Sets the dataset id.
-	 *
-	 * @param datasetId
-	 *            the datasetId to set
-	 */
-	public void setDatasetId(final long datasetId) {
-		this.datasetId = datasetId;
-	}
-
-	/**
-	 * Sets the dest dir.
-	 *
-	 * @param destDir
-	 *            the destDir to set
-	 */
-	public void setDestDir(final File destDir) {
-		this.destDir = destDir;
-	}
-
-	/**
-	 * Sets the dest dir.
-	 *
-	 * @param destDir
-	 *            the new dest dir
-	 */
-	public void setDestDir(final String destDir) {
-		this.destDir = new File(destDir);
-		if (!this.destDir.isDirectory()) {
-			throw new IllegalArgumentException(
-					"Destination is not a directory! destDir: " + destDir);
+		if (cl.hasOption("studyId") && cl.hasOption("subjectId") && cl.hasOption("datasetId")) {
+			exit("Either -datasetId -subjectId or -studyId is required");
 		}
 	}
 

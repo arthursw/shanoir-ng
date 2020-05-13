@@ -36,6 +36,8 @@ public class ShanoirUploaderServiceClientNG {
 	
 	private static final String SHANOIR_SERVER_URL = "shanoir.server.url";
 
+	private static final String SERVICE_FIND_STUDY_BY_ID = "service.studies.find.study.by.id";
+
 	private static final String SERVICE_STUDIES_NAMES_CENTERS = "service.studies.names.centers";
 
 	private static final String SERVICE_STUDYCARDS_FIND_BY_STUDY_IDS = "service.studycards.find.by.study.ids";
@@ -62,6 +64,8 @@ public class ShanoirUploaderServiceClientNG {
 	
 	private String serverURL;
 	
+	private String serviceURLStudyById;
+
 	private String serviceURLStudiesNamesAndCenters;
 	
 	private String serviceURLStudyCardsByStudyIds;
@@ -87,8 +91,10 @@ public class ShanoirUploaderServiceClientNG {
 	public ShanoirUploaderServiceClientNG() {
 		this.httpService = new HttpService();
 		this.serverURL = ShUpConfig.profileProperties.getProperty(SHANOIR_SERVER_URL);
-		this.serviceURLStudiesNamesAndCenters = this.serverURL
-			+ ShUpConfig.profileProperties.getProperty(SERVICE_STUDIES_NAMES_CENTERS);
+		this.serviceURLStudyById = this.serverURL
+			+ ShUpConfig.profileProperties.getProperty(SERVICE_FIND_STUDY_BY_ID);
+			this.serviceURLStudiesNamesAndCenters = this.serverURL
+				+ ShUpConfig.profileProperties.getProperty(SERVICE_STUDIES_NAMES_CENTERS);
 		this.serviceURLStudyCardsByStudyIds = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_STUDYCARDS_FIND_BY_STUDY_IDS);
 		this.serviceURLAcquisitionEquipmentById = this.serverURL
@@ -164,6 +170,21 @@ public class ShanoirUploaderServiceClientNG {
 		}
 	}
 
+	public List<Study> findStudyById(Long studyId) throws Exception {
+		if (studyId != null) {
+			HttpResponse response = httpService.get(this.serviceURLStudyById + studyId);
+			int code = response.getStatusLine().getStatusCode();
+			if (code == 200) {
+//				ResponseHandler<String> handler = new BasicResponseHandler();
+//				String body = handler.handleResponse(response);
+//				logger.info(body);
+				List<Study> studies = Util.getMappedList(response, Study.class);
+				return studies;
+			}
+		}
+		return null;
+	}
+		
 	public List<Examination> findExaminationsBySubjectId(Long subjectId) throws Exception {
 		if (subjectId != null) {
 			HttpResponse response = httpService.get(this.serviceURLExaminationsBySubjectId + subjectId);
@@ -178,7 +199,22 @@ public class ShanoirUploaderServiceClientNG {
 		}
 		return null;
 	}
-	
+
+	public List<org.shanoir.core.model.Examination> findExaminationsBySubjectIdStudyId(Long subjectId, Long studyId) throws Exception {
+		if (subjectId != null) {
+			HttpResponse response = httpService.get(this.serviceURLExaminationsBySubjectId + subjectId + "/study/" + studyId);
+			int code = response.getStatusLine().getStatusCode();
+			if (code == 200) {
+//				ResponseHandler<String> handler = new BasicResponseHandler();
+//				String body = handler.handleResponse(response);
+//				logger.info(body);
+				List<org.shanoir.core.model.Examination> examinations = Util.getMappedList(response, org.shanoir.core.model.Examination.class);
+				return examinations;
+			}
+		}
+		return null;
+	}
+
 	public AcquisitionEquipment findAcquisitionEquipmentById(Long acquisitionEquipmentId) throws Exception {
 		if (acquisitionEquipmentId != null) {
 			HttpResponse response = httpService.get(this.serviceURLAcquisitionEquipmentById + acquisitionEquipmentId);
