@@ -1,20 +1,27 @@
 package org.shanoir.downloader;
 
+import org.json.*;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.file.Files;
+import java.security.GeneralSecurityException;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.parsers.ParserConfigurationException;
-
-import com.thoughtworks.xstream.alias.ClassMapper.Null;
 
 import org.apache.commons.cli.MissingArgumentException;
 import org.apache.commons.cli.Option;
@@ -24,17 +31,28 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.SystemUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContexts;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.jboss.seam.core.Expressions;
+import org.jboss.seam.core.Expressions.MethodExpression;
+import org.jboss.seam.security.Identity;
+import org.keycloak.adapters.KeycloakDeploymentBuilder;
 import org.keycloak.adapters.installed.KeycloakInstalled;
-
-import org.shanoir.core.model.DatasetAcquisition;
-import org.shanoir.core.model.Examination;
-import org.shanoir.core.model.dataset.Dataset;
-
+import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.shanoir.uploader.ShUpConfig;
 import org.shanoir.uploader.ShUpOnloadConfig;
 
 import org.shanoir.uploader.service.rest.ShanoirUploaderServiceClientNG;
 import org.shanoir.uploader.utils.Util;
+import org.shanoir.util.ShanoirUtil;
 import org.springframework.http.HttpHeaders;
 /**
  * This class intends to be used as a binary executable to download datasets
@@ -90,6 +108,7 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	static {
 		OptionBuilder.withArgName("datasetId");
 		OptionBuilder.hasArg();
+		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("The dataset id.");
 		datasetIdOption = OptionBuilder.create("datasetId");
 	}
@@ -97,6 +116,7 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	static {
 		OptionBuilder.withArgName("subjectId");
 		OptionBuilder.hasArg();
+		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("The subject id.");
 		subjectIdOption = OptionBuilder.create("subjectId");
 	}
@@ -104,6 +124,7 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	static {
 		OptionBuilder.withArgName("studyId");
 		OptionBuilder.hasArg();
+		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("The study id.");
 		studyIdOption = OptionBuilder.create("studyId");
 	}
@@ -174,13 +195,82 @@ public final class ShanoirDownloader extends ShanoirCLI {
 
 	}
 
-	private void keycloakAuthentification() {
+	// private void keycloakDesktopAuthentification() {
+	// 	try {
+	// 		FileInputStream fIS = new FileInputStream(ShUpConfig.keycloakJson);
+	// 		KeycloakInstalled keycloakInstalled = new KeycloakInstalled(fIS);
+	// 		keycloakInstalled.setLocale(Locale.ENGLISH);
+	// 		keycloakInstalled.loginDesktop();
+	// 		ShUpOnloadConfig.setKeycloakInstalled(keycloakInstalled);
+	// 	} catch (Exception e) {
+	// 		System.out.println(e.getMessage());
+	// 	}
+	// }
+
+	private void keycloakAuthentification(String username, String password) {
 		try {
-			FileInputStream fIS = new FileInputStream(ShUpConfig.keycloakJson);
-			KeycloakInstalled keycloakInstalled = new KeycloakInstalled(fIS);
-			keycloakInstalled.setLocale(Locale.ENGLISH);
-			keycloakInstalled.loginDesktop();
-			ShUpOnloadConfig.setKeycloakInstalled(keycloakInstalled);
+
+			List<String> keycloakJsonString = Files.readAllLines(ShUpConfig.keycloakJson.toPath());
+			JSONObject keycloakJson = new JSONObject(String.join("", keycloakJsonString));
+
+			String keycloakAuthenticationURL = keycloakJson.getString("auth-server-url");
+
+			keycloakAuthenticationURL += "/realms/" + keycloakJson.getString("realm") + "/protocol/openid-connect/token";
+
+			SSLContext sslContext = null;
+			try {
+				sslContext = SSLContexts.custom().useTLS().build();
+			} catch (GeneralSecurityException e) {
+				log.error("Error during ssl context initialization", e);
+			}
+
+			final SSLConnectionSocketFactory f = new SSLConnectionSocketFactory(sslContext, new String[] { "TLSv1",
+					"TLSv1.1", "TLSv1.2" }, null, SSLConnectionSocketFactory.BROWSER_COMPATIBLE_HOSTNAME_VERIFIER);
+
+			final CloseableHttpClient httpclient = HttpClients.custom().setSSLSocketFactory(f).build();
+			final HttpPost httpost = new HttpPost(keycloakAuthenticationURL);
+			StringEntity se = null;
+			try {
+				final StringBuilder str = new StringBuilder();
+				str.append("client_id=shanoir-uploader");
+				str.append("&grant_type=password");
+				str.append("&username=").append(username);
+				str.append("&password=").append(URLEncoder.encode(password, "UTF-8"));
+				str.append("&scope=openid info");
+				// str.append("&scope=openid info offline_access");
+				se = new StringEntity(str.toString());
+			} catch (UnsupportedEncodingException e) {
+				log.error("Keycloak authentication. Unsupported encoding exception on entity creation", e);
+			}
+
+			httpost.setEntity(se);
+			httpost.setHeader("Content-type", "application/x-www-form-urlencoded");
+
+			CloseableHttpResponse response = null;
+			try {
+				response = httpclient.execute(httpost);
+
+				String responseEntityString = EntityUtils.toString(response.getEntity());
+				
+				final int statusCode = response.getStatusLine().getStatusCode();
+				if (HttpStatus.SC_OK == statusCode) {
+					JSONObject responseEntityJson = new JSONObject(responseEntityString);					
+					ShUpOnloadConfig.tokenString = responseEntityJson.getString("access_token");
+				}
+			} catch (ClientProtocolException e) {
+				log.error("Keycloak is unreachable. Client protocol exception", e);
+			} catch (IOException e) {
+				log.error("Keycloak is unreachable. IO exception", e);
+			} finally {
+				try {
+					httpclient.close();
+					response.close();
+				} catch (Exception e) {
+					log.error("There was an error closing the Keycloak connection", e);
+				}
+			}
+
+			// return false;
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 		}
@@ -190,9 +280,6 @@ public final class ShanoirDownloader extends ShanoirCLI {
 	// private Downloader downloader;
 	private ShanoirUploaderServiceClientNG shanoirUploaderServiceClientNG;
 
-	/** The ref dataset expression format ID of the Dataset to be downloaded. */
-	private long formatId;
-
 	/**
 	 * @param opts
 	 *            the specific options of the command line
@@ -201,12 +288,11 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		super(opts, DESCRIPTION, EXAMPLE, USAGE);
 		initShanoirUploaderFolder();
 		initProperties(ShUpConfig.BASIC_PROPERTIES, ShUpConfig.basicProperties);
-		System.out.println("basic.properties successfully initialized.");
 
 		String shanoirNgLocalProfile = "sh-ng-localhost";
 		String filePath = File.separator + ShUpConfig.PROFILE_DIR + shanoirNgLocalProfile;
 		ShUpConfig.profileDirectory = new File(ShUpConfig.shanoirUploaderFolder, filePath);
-		System.out.println("Profile directory set to: " + ShUpConfig.profileDirectory.getAbsolutePath());
+
 		File profilePropertiesFile = new File(ShUpConfig.profileDirectory, ShUpConfig.PROFILE_PROPERTIES);
 		loadPropertiesFromFile(ShUpConfig.profileProperties, profilePropertiesFile);
 
@@ -215,7 +301,6 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		File keycloakJson = new File(ShUpConfig.profileDirectory, ShUpConfig.KEYCLOAK_JSON);
 		if (keycloakJson.exists()) {
 			ShUpConfig.keycloakJson = keycloakJson;
-			System.out.println("keycloak.json successfully initialized.");
 		} else {
 			if (ShUpOnloadConfig.isShanoirNg()) {
 				System.err.println("Error: missing keycloak.json! Connection with sh-ng will not work.");
@@ -262,14 +347,8 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		}
 	}
 	
-	private void downloadDataset(File destDir, Long datasetId) {
-		Long formatId = (long) 0;
-
-		if (cl.hasOption("formatId")) {
-			formatId = Long.parseLong(cl.getOptionValue("formatId"));
-		}
-
-		HttpResponse response = shanoirUploaderServiceClientNG.downloadDatasetById(datasetId, formatId == 6 ? "dcm" : "nii");
+	public static void downloadDataset(File destDir, Long datasetId, String format, ShanoirUploaderServiceClientNG shng) throws Exception {
+		HttpResponse response = shng.downloadDatasetById(datasetId, format);
 
 		Header header = response.getFirstHeader(HttpHeaders.CONTENT_DISPOSITION);
 		String fileName = header.getValue();
@@ -280,18 +359,24 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		FileUtils.copyInputStreamToFile(response.getEntity().getContent(), downloadedFile);
 	}
 
-	private void downloadDatasetByStudyAndSubject(File destDir, Long subjectId, Long studyId) {
-		List<Examination> examinations = shanoirUploaderServiceClientNG.findExaminationsBySubjectIdStudyId(subjectId, studyId);
-		
-		for(Examination examination : examinations) {
-			List<DatasetAcquisition> datasetAcquisitions = examination.getDatasetAcquisitionList();
-			for(DatasetAcquisition datasetAcquisition : datasetAcquisitions) {
-				for(List<Dataset> datasets : datasetAcquisition.getDatasetList()) {
-					for(Dataset dataset : datasets) {
-						downloadDataset(destDir, dataset.getDatasetId());
-					}
-				}
-			}
+	public static void downloadDatasetByStudy(File destDir, Long studyId, String format, ShanoirUploaderServiceClientNG shng) throws Exception {
+		List<Long> datasetIds = shng.findDatasetIdsByStudyId(studyId);
+		for(Long datasetId : datasetIds) {
+			downloadDataset(destDir, datasetId, format, shng);
+		}
+	}
+
+	public static void downloadDatasetBySubject(File destDir, Long subjectId, String format, ShanoirUploaderServiceClientNG shng) throws Exception {
+		List<Long> datasetIds = shng.findDatasetIdsBySubjectId(subjectId);
+		for(Long datasetId : datasetIds) {
+			downloadDataset(destDir, datasetId, format, shng);
+		}
+	}
+
+	public static void downloadDatasetByStudyAndSubject(File destDir, Long subjectId, Long studyId, String format, ShanoirUploaderServiceClientNG shng) throws Exception {
+		List<Long> datasetIds = shng.findDatasetIdsBySubjectIdStudyId(subjectId, studyId);
+		for(Long datasetId : datasetIds) {
+			downloadDataset(destDir, datasetId, format, shng);
 		}
 	}
 
@@ -304,38 +389,48 @@ public final class ShanoirDownloader extends ShanoirCLI {
 		File destDir = new File(SystemUtils.JAVA_IO_TMPDIR);
 		if (cl.hasOption("destDir")) {
 			destDir = new File(cl.getOptionValue("destDir"));
-			if (!this.destDir.isDirectory()) {
+			if (!destDir.isDirectory()) {
 				throw new IllegalArgumentException("Destination is not a directory! destDir: " + destDir);
 			}
 		}
 
-		keycloakAuthentification();
+		keycloakAuthentification(cl.getOptionValue("user"), cl.getOptionValue("password"));
 		
 		shanoirUploaderServiceClientNG = new ShanoirUploaderServiceClientNG();
 		
 		ShUpConfig.profileProperties.setProperty("shanoir.server.url", "http://" + getHost() + ":" + getPort());
 		
 		try {
-			HttpResponse response = null;
-			
+			String format = "nii";
+
+			if (cl.hasOption("formatId")) {
+				format = Long.parseLong(cl.getOptionValue("formatId")) == 6 ? "dcm" : "nii";
+			}
+
 			if (cl.hasOption("datasetId")) {
 				Long datasetId = Long.parseLong(cl.getOptionValue("datasetId"));
-				downloadDataset(destDir, datasetId);
+				downloadDataset(destDir, datasetId, format, shanoirUploaderServiceClientNG);
+			}
+
+			if (cl.hasOption("studyId") && !cl.hasOption("subjectId")) {
+				Long studyId = Long.parseLong(cl.getOptionValue("studyId"));
+				downloadDatasetByStudy(destDir, studyId, format, shanoirUploaderServiceClientNG);
 			}
 
 			if (cl.hasOption("subjectId") && !cl.hasOption("studyId")) {
-				List<org.shanoir.uploader.model.rest.Examination> examinations = shanoirUploaderServiceClientNG.findExaminationsBySubjectId(subjectId);
-				
-				for(org.shanoir.uploader.model.rest.Examination examination : examinations) {
-					studyId = examination.getStudy();
-					downloadDatasetByStudyAndSubject(destDir, studyId, subjectId);
-				}
+				Long subjectId = Long.parseLong(cl.getOptionValue("subjectId"));
+				downloadDatasetBySubject(destDir, subjectId, format, shanoirUploaderServiceClientNG);
 			}
 
 			if (cl.hasOption("subjectId") && cl.hasOption("studyId")) {
-				downloadDatasetByStudyAndSubject(destDir, studyId, subjectId);
+				Long studyId = Long.parseLong(cl.getOptionValue("studyId"));
+				Long subjectId = Long.parseLong(cl.getOptionValue("subjectId"));
+				downloadDatasetByStudyAndSubject(destDir, studyId, subjectId, format, shanoirUploaderServiceClientNG);
 			}
-	        
+	       
+		} catch (NumberFormatException e) {
+			e.printStackTrace();
+			exit("Download failed: could not parse your dataset, subject or study id, make sure it only contains numbers.");
 		} catch (Exception e) {
 			e.printStackTrace();
 			exit("Download failed: " + e.getMessage());

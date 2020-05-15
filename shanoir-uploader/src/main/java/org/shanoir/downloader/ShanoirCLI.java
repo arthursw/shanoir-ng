@@ -87,11 +87,22 @@ public abstract class ShanoirCLI {
 		hostOption = OptionBuilder.create("host");
 	}
 
+	/** -user to set the user. Can be defined in the user property file. */
+	private static Option userOption;
+	static {
+		OptionBuilder.withArgName("user");
+		OptionBuilder.hasArg();
+		OptionBuilder.isRequired(true);
+		OptionBuilder.withDescription("username for user identitification.");
+		userOption = OptionBuilder.create("user");
+	}
+
 	/** -password to set the password. Can be defined in the user property file. */
 	private static Option passwordOption;
 	static {
 		OptionBuilder.withArgName("password");
 		OptionBuilder.hasArg();
+		OptionBuilder.isRequired(true);
 		OptionBuilder.withDescription("password for user identitification.");
 		passwordOption = OptionBuilder.create("password");
 	}
@@ -251,6 +262,7 @@ public abstract class ShanoirCLI {
 		opts.addOption(versionOption);
 		opts.addOption(hostOption);
 		opts.addOption(portOption);
+		opts.addOption(userOption);
 		opts.addOption(passwordOption);
 		options = opts;
 	}

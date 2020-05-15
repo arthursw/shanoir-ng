@@ -18,6 +18,11 @@
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>org.mod4j.org.apache.commons</groupId>
+			<artifactId>cli</artifactId>
+			<version>1.0.0</version>
+		</dependency>
 		<!-- dependency httpcomponents -->
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
@@ -79,6 +84,12 @@
 			<artifactId>persistence-api</artifactId>
 			<version>1.0</version>
 			<scope>provided</scope>
+		</dependency>
+		<!-- dependency for json -->
+		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+			<version>20190722</version>
 		</dependency>
 		<!-- dependency for Quartz library -->
 		<dependency>
@@ -223,6 +234,20 @@
 		<plugins>
 			<!-- Place any Ant task here. You can add anything you can add between 
 				<target> and </target> in a build.xml. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.1.0</version>
+				<configuration>
+					<archive>
+					<manifest>
+						<addClasspath>true</addClasspath>
+						<classpathPrefix>lib/</classpathPrefix>
+						<mainClass>org.shanoir.downloader.ShanoirDownloader</mainClass>
+					</manifest>
+					</archive>
+				</configuration>
+			</plugin>
 			<plugin>
 				<artifactId>maven-antrun-plugin</artifactId>
 				<executions>

@@ -2,12 +2,16 @@ package org.shanoir.uploader.service.rest;
 
 import java.io.File;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.ws.rs.core.UriBuilder;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.http.Header;
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.shanoir.uploader.ShUpConfig;
 import org.shanoir.uploader.model.rest.AcquisitionEquipment;
@@ -36,8 +40,6 @@ public class ShanoirUploaderServiceClientNG {
 	
 	private static final String SHANOIR_SERVER_URL = "shanoir.server.url";
 
-	private static final String SERVICE_FIND_STUDY_BY_ID = "service.studies.find.study.by.id";
-
 	private static final String SERVICE_STUDIES_NAMES_CENTERS = "service.studies.names.centers";
 
 	private static final String SERVICE_STUDYCARDS_FIND_BY_STUDY_IDS = "service.studycards.find.by.study.ids";
@@ -46,7 +48,7 @@ public class ShanoirUploaderServiceClientNG {
 	
 	private static final String SERVICE_SUBJECTS_FIND_BY_IDENTIFIER = "service.subjects.find.by.identifier";
 
-	private static final String SERVICE_EXAMINATIONS_BY_SUBJECT_ID = "service.examinations.find.by.subject.id";
+	private static final String SERVICE_DATASETS = "service.datasets";
 	
 	private static final String SERVICE_SUBJECTS_CREATE = "service.subjects.create";
 	
@@ -57,14 +59,14 @@ public class ShanoirUploaderServiceClientNG {
 	private static final String SERVICE_IMPORTER_START_IMPORT_JOB = "service.importer.start.import.job";
 
 	private static final String SERVICE_IMPORTER_START_IMPORT = "service.importer.start.import";
-	
-	private static final String SERVICE_DATASETS_DOWNLOAD_BY_ID = "service.datasets.download.by.id";
+
+	private static final String SERVICE_EXAMINATIONS_BY_SUBJECT_ID = "service.examinations.find.by.subject.id";
+
+	private static final String SERVICE_SUBJECTS_BY_STUDY_ID = "service.subjects.by.study.id";
 
 	private HttpService httpService;
 	
 	private String serverURL;
-	
-	private String serviceURLStudyById;
 
 	private String serviceURLStudiesNamesAndCenters;
 	
@@ -74,7 +76,7 @@ public class ShanoirUploaderServiceClientNG {
 	
 	private String serviceURLSubjectsFindByIdentifier;
 	
-	private String serviceURLExaminationsBySubjectId;
+	private String serviceURLDatasets;
 	
 	private String serviceURLSubjectsCreate;
 	
@@ -85,14 +87,14 @@ public class ShanoirUploaderServiceClientNG {
 	private String serviceURLImporterStartImportJob;
 
 	private String serviceURLImporterStartImport;
-	
-	private String serviceURLDownloadDatasetById;
+
+	private String serviceURLExaminationsBySubjectId;
+
+	private String serviceURLSubjectsByStudyId;
 
 	public ShanoirUploaderServiceClientNG() {
 		this.httpService = new HttpService();
 		this.serverURL = ShUpConfig.profileProperties.getProperty(SHANOIR_SERVER_URL);
-		this.serviceURLStudyById = this.serverURL
-			+ ShUpConfig.profileProperties.getProperty(SERVICE_FIND_STUDY_BY_ID);
 			this.serviceURLStudiesNamesAndCenters = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_STUDIES_NAMES_CENTERS);
 		this.serviceURLStudyCardsByStudyIds = this.serverURL
@@ -101,8 +103,8 @@ public class ShanoirUploaderServiceClientNG {
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_ACQUISITION_EQUIPMENT_BY_ID);
 		this.serviceURLSubjectsFindByIdentifier = this.serverURL
 			+ ShUpConfig.profileProperties.getProperty(SERVICE_SUBJECTS_FIND_BY_IDENTIFIER);
-		this.serviceURLExaminationsBySubjectId = this.serverURL
-			+ ShUpConfig.profileProperties.getProperty(SERVICE_EXAMINATIONS_BY_SUBJECT_ID);
+		this.serviceURLDatasets = this.serverURL
+			+ ShUpConfig.profileProperties.getProperty(SERVICE_DATASETS);
 		this.serviceURLSubjectsCreate = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_SUBJECTS_CREATE);
 		this.serviceURLExaminationsCreate = this.serverURL
@@ -111,10 +113,12 @@ public class ShanoirUploaderServiceClientNG {
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_IMPORTER_CREATE_TEMP_DIR);
 		this.serviceURLImporterStartImportJob = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_IMPORTER_START_IMPORT_JOB);
+		this.serviceURLExaminationsBySubjectId = this.serverURL
+		+ ShUpConfig.profileProperties.getProperty(SERVICE_EXAMINATIONS_BY_SUBJECT_ID);
+		this.serviceURLSubjectsByStudyId = this.serverURL
+		+ ShUpConfig.profileProperties.getProperty(SERVICE_SUBJECTS_BY_STUDY_ID);
 		this.serviceURLImporterStartImport = this.serverURL
 				+ ShUpConfig.profileProperties.getProperty(SERVICE_IMPORTER_START_IMPORT);
-		this.serviceURLDownloadDatasetById = this.serverURL
-				+ ShUpConfig.profileProperties.getProperty(SERVICE_DATASETS_DOWNLOAD_BY_ID);
 		logger.info("ShanoirUploaderServiceNG successfully initialized.");
 	}
 	
@@ -169,21 +173,6 @@ public class ShanoirUploaderServiceClientNG {
 			return null;
 		}
 	}
-
-	public List<Study> findStudyById(Long studyId) throws Exception {
-		if (studyId != null) {
-			HttpResponse response = httpService.get(this.serviceURLStudyById + studyId);
-			int code = response.getStatusLine().getStatusCode();
-			if (code == 200) {
-//				ResponseHandler<String> handler = new BasicResponseHandler();
-//				String body = handler.handleResponse(response);
-//				logger.info(body);
-				List<Study> studies = Util.getMappedList(response, Study.class);
-				return studies;
-			}
-		}
-		return null;
-	}
 		
 	public List<Examination> findExaminationsBySubjectId(Long subjectId) throws Exception {
 		if (subjectId != null) {
@@ -200,16 +189,64 @@ public class ShanoirUploaderServiceClientNG {
 		return null;
 	}
 
-	public List<org.shanoir.core.model.Examination> findExaminationsBySubjectIdStudyId(Long subjectId, Long studyId) throws Exception {
-		if (subjectId != null) {
-			HttpResponse response = httpService.get(this.serviceURLExaminationsBySubjectId + subjectId + "/study/" + studyId);
+	public List<Long> findDatasetIdsByStudyId(Long studyId) throws Exception {
+		if (studyId != null) {
+			List<Long> datasetIds = new ArrayList<Long>();
+			HttpResponse response = httpService.get(this.serviceURLSubjectsByStudyId + studyId + "/allSubjects");
 			int code = response.getStatusLine().getStatusCode();
 			if (code == 200) {
 //				ResponseHandler<String> handler = new BasicResponseHandler();
 //				String body = handler.handleResponse(response);
 //				logger.info(body);
-				List<org.shanoir.core.model.Examination> examinations = Util.getMappedList(response, org.shanoir.core.model.Examination.class);
-				return examinations;
+				List<Subject> subjects = Util.getMappedList(response, Subject.class);
+				for(Subject subject : subjects) {
+					List<Long> ids = findDatasetIdsBySubjectIdStudyId(subject.getId(), studyId);
+					if(ids != null) {
+						datasetIds.addAll(ids);
+					}
+				}
+				return datasetIds;
+			}
+		}
+		return null;
+	}
+
+	public List<Long> findDatasetIdsBySubjectId(Long subjectId) throws Exception {
+		if (subjectId != null) {
+			HttpResponse response = httpService.get(this.serviceURLDatasets + "subject/" + subjectId);
+
+			String responseEntityString = EntityUtils.toString(response.getEntity());
+			System.out.println(responseEntityString);
+		
+			List<Header> httpHeaders = Arrays.asList(response.getAllHeaders());        
+			for (Header header : httpHeaders) {
+				System.out.println("Headers.. name,value:"+header.getName() + "," + header.getValue());
+			}
+			System.out.println(response.getStatusLine());
+			
+			int code = response.getStatusLine().getStatusCode();
+			if (code == 200) {
+//				ResponseHandler<String> handler = new BasicResponseHandler();
+//				String body = handler.handleResponse(response);
+//				logger.info(body);
+				List<Long> datasetIds = Util.getMappedList(response, Long.class);
+				return datasetIds;
+			}
+		}
+		return null;
+	}
+
+	public List<Long> findDatasetIdsBySubjectIdStudyId(Long subjectId, Long studyId) throws Exception {
+		if (subjectId != null) {
+			
+			HttpResponse response = httpService.get(this.serviceURLDatasets + "subject/" + subjectId + "/study/" + studyId);
+			int code = response.getStatusLine().getStatusCode();
+			if (code == 200) {
+//				ResponseHandler<String> handler = new BasicResponseHandler();
+//				String body = handler.handleResponse(response);
+//				logger.info(body);
+				List<Long> datasetIds = Util.getMappedList(response, Long.class);
+				return datasetIds;
 			}
 		}
 		return null;
@@ -259,9 +296,10 @@ public class ShanoirUploaderServiceClientNG {
 
 	public HttpResponse downloadDatasetById(Long datasetId, String format) throws Exception {
 		if (datasetId != null) {
-			URI url = UriBuilder.fromUri(this.serviceURLDownloadDatasetById + datasetId).queryParam("format", format).build();
+			URI url = UriBuilder.fromUri(this.serviceURLDatasets + "download/" + datasetId).queryParam("format", format).build();
 			
 			HttpResponse response = httpService.get(url.toString());
+
 			int code = response.getStatusLine().getStatusCode();
 			if (code == 200) {
 				return response;
