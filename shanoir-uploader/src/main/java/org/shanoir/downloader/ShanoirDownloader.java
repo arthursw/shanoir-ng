@@ -236,8 +236,8 @@ public final class ShanoirDownloader extends ShanoirCLI {
 				str.append("&grant_type=password");
 				str.append("&username=").append(username);
 				str.append("&password=").append(URLEncoder.encode(password, "UTF-8"));
-				str.append("&scope=openid info");
-				// str.append("&scope=openid info offline_access");
+				// str.append("&scope=openid info");
+				str.append("&scope=openid info offline_access");
 				se = new StringEntity(str.toString());
 			} catch (UnsupportedEncodingException e) {
 				log.error("Keycloak authentication. Unsupported encoding exception on entity creation", e);
@@ -425,7 +425,7 @@ public final class ShanoirDownloader extends ShanoirCLI {
 			if (cl.hasOption("subjectId") && cl.hasOption("studyId")) {
 				Long studyId = Long.parseLong(cl.getOptionValue("studyId"));
 				Long subjectId = Long.parseLong(cl.getOptionValue("subjectId"));
-				downloadDatasetByStudyAndSubject(destDir, studyId, subjectId, format, shanoirUploaderServiceClientNG);
+				downloadDatasetByStudyAndSubject(destDir, subjectId, studyId, format, shanoirUploaderServiceClientNG);
 			}
 	       
 		} catch (NumberFormatException e) {

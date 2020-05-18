@@ -194,6 +194,16 @@ public class ShanoirUploaderServiceClientNG {
 			List<Long> datasetIds = new ArrayList<Long>();
 			HttpResponse response = httpService.get(this.serviceURLSubjectsByStudyId + studyId + "/allSubjects");
 			int code = response.getStatusLine().getStatusCode();
+			
+			String responseEntityString = EntityUtils.toString(response.getEntity());
+			System.out.println(responseEntityString);
+		
+			List<Header> httpHeaders = Arrays.asList(response.getAllHeaders());        
+			for (Header header : httpHeaders) {
+				System.out.println("Headers.. name,value:"+header.getName() + "," + header.getValue());
+			}
+			System.out.println(response.getStatusLine());
+			
 			if (code == 200) {
 //				ResponseHandler<String> handler = new BasicResponseHandler();
 //				String body = handler.handleResponse(response);
@@ -214,15 +224,6 @@ public class ShanoirUploaderServiceClientNG {
 	public List<Long> findDatasetIdsBySubjectId(Long subjectId) throws Exception {
 		if (subjectId != null) {
 			HttpResponse response = httpService.get(this.serviceURLDatasets + "subject/" + subjectId);
-
-			String responseEntityString = EntityUtils.toString(response.getEntity());
-			System.out.println(responseEntityString);
-		
-			List<Header> httpHeaders = Arrays.asList(response.getAllHeaders());        
-			for (Header header : httpHeaders) {
-				System.out.println("Headers.. name,value:"+header.getName() + "," + header.getValue());
-			}
-			System.out.println(response.getStatusLine());
 			
 			int code = response.getStatusLine().getStatusCode();
 			if (code == 200) {

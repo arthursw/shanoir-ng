@@ -47,6 +47,8 @@ import org.shanoir.ng.dataset.service.DatasetService;
 import org.shanoir.ng.datasetacquisition.model.DatasetAcquisition;
 import org.shanoir.ng.datasetfile.DatasetFile;
 import org.shanoir.ng.download.WADODownloaderService;
+import org.shanoir.ng.examination.model.Examination;
+import org.shanoir.ng.examination.service.ExaminationService;
 import org.shanoir.ng.exporter.service.BIDSService;
 import org.shanoir.ng.shared.error.FieldErrorMap;
 import org.shanoir.ng.shared.exception.EntityNotFoundException;
@@ -99,6 +101,9 @@ public class DatasetApiController implements DatasetApi {
 
 	@Autowired
 	private DatasetService datasetService;
+
+	@Autowired
+	private ExaminationService examinationService;
 
 	private final HttpServletRequest request;
 	
