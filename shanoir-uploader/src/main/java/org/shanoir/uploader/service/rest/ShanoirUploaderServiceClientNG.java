@@ -192,18 +192,12 @@ public class ShanoirUploaderServiceClientNG {
 	public List<Long> findDatasetIdsByStudyId(Long studyId) throws Exception {
 		if (studyId != null) {
 			List<Long> datasetIds = new ArrayList<Long>();
-			HttpResponse response = httpService.get(this.serviceURLSubjectsByStudyId + studyId + "/allSubjects");
+			
+			URI url = UriBuilder.fromUri(this.serviceURLSubjectsByStudyId + studyId + "/allSubjects").queryParam("preclinical",  "null").build();
+
+			HttpResponse response = httpService.get(url.toString());
 			int code = response.getStatusLine().getStatusCode();
-			
-			String responseEntityString = EntityUtils.toString(response.getEntity());
-			System.out.println(responseEntityString);
-		
-			List<Header> httpHeaders = Arrays.asList(response.getAllHeaders());        
-			for (Header header : httpHeaders) {
-				System.out.println("Headers.. name,value:"+header.getName() + "," + header.getValue());
-			}
-			System.out.println(response.getStatusLine());
-			
+						
 			if (code == 200) {
 //				ResponseHandler<String> handler = new BasicResponseHandler();
 //				String body = handler.handleResponse(response);
